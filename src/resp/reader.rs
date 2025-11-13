@@ -1,5 +1,5 @@
-use std::io::{BufRead, BufReader, Read};
 use crate::resp::resp::{Resp, Typ, Value};
+use std::io::{self, BufRead, BufReader, Read};
 
 pub struct Reader<R: Read> {
     reader: BufReader<R>,
@@ -12,15 +12,27 @@ impl<R: Read> Reader<R> {
         }
     }
 
-    pub fn read(&mut self) -> std::io::Result<Resp> {
-        let mut first_byte = [0u8; 1];
-        self.reader.read_exact(&mut first_byte)?;
-        match Typ::from_byte(first_byte[0]) {
-            Some(Typ::ARRAY) => self.read_array(),
-            Some(Typ::BULK) => self.read_bulk(),
+    pub fn read(&mut self) -> io::Result<Resp> {
+        // Peek the next byte without consuming it
+        let buf = self.reader.fill_buf()?;
+        if buf.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
+        }
+        let first_byte = buf[0];
+
+        match Typ::from_byte(first_byte) {
+            Some(Typ::ARRAY) => {
+                // consume that byte before reading array content
+                self.reader.consume(1);
+                self.read_array()
+            }
+            Some(Typ::BULK) => {
+                // consume that byte before reading bulk content
+                self.reader.consume(1);
+                self.read_bulk()
+            }
             _ => {
-                // put back the byte
-                self.reader.get_mut().by_ref().take(1).read_exact(&mut first_byte)?;
+                // don't consume; let `read_inline()` start from same byte
                 self.read_inline()
             }
         }
@@ -34,7 +46,7 @@ impl<R: Read> Reader<R> {
         }
         Ok(Resp {
             typ: Typ::ARRAY,
-            val: Value::Arr(arr)
+            val: Value::Arr(arr),
         })
     }
 
@@ -43,7 +55,7 @@ impl<R: Read> Reader<R> {
         if len < 0 {
             return Ok(Resp {
                 typ: Typ::BULK,
-                val: Value::Str("".to_string())
+                val: Value::Str("".to_string()),
             });
         }
         let mut buf = vec![0u8; len as usize];
@@ -58,7 +70,6 @@ impl<R: Read> Reader<R> {
     fn read_inline(&mut self) -> std::io::Result<Resp> {
         let line = self.read_line()?;
         let s = String::from_utf8(line).unwrap_or_default();
-        println!("read inline {}", s);
         Ok(Resp {
             typ: Typ::STRING,
             val: Value::Str(s),

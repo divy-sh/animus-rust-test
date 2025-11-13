@@ -1,5 +1,5 @@
-use std::io::{self, Write};
 use crate::resp::resp::{Resp, Value};
+use std::io::{self, Write};
 
 pub struct Writer<W: Write> {
     writer: W,
@@ -11,12 +11,9 @@ impl<W: Write> Writer<W> {
     }
 
     pub fn write(&mut self, v: Resp) -> io::Result<()> {
-        println!("{:?}", v);
         let bytes = v.marshal();
-        println!("{:?}", bytes);
-        let err :Result<(), io::Error> = self.writer.write_all(&bytes);
+        let _err: Result<(), io::Error> = self.writer.write_all(&bytes);
         self.writer.flush()?;
-        println!("{:?}", err);
         Ok(())
     }
 }

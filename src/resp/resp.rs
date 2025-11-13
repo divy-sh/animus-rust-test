@@ -1,10 +1,10 @@
 #[derive(Debug, Clone)]
 pub enum Typ {
-	STRING,
-	ERROR,
-	INTEGER,
-	BULK,
-	ARRAY
+    STRING,
+    ERROR,
+    INTEGER,
+    BULK,
+    ARRAY,
 }
 
 impl Typ {
@@ -40,5 +40,5 @@ pub enum Value {
 #[derive(Debug, Clone)]
 pub struct Resp {
     pub typ: Typ,
-    pub val: Value
+    pub val: Value,
 }

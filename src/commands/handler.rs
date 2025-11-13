@@ -27,62 +27,77 @@ fn info(args: Vec<Resp>) -> Resp {
     match args[1].val {
         Value::Str(ref s) if s.to_uppercase() == "SAVE" => {
             return Resp {
-                val: Value::Arr([Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str(s.to_uppercase().to_string()),
-                },
-                Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str("".to_string()),
-                }
-                ].to_vec()),
+                val: Value::Arr(
+                    [
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str(s.to_uppercase().to_string()),
+                        },
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str("".to_string()),
+                        },
+                    ]
+                    .to_vec(),
+                ),
                 typ: Typ::BULK,
             };
         }
         Value::Str(ref s) if s.to_uppercase() == "APPENDONLY" => {
             return Resp {
-                val: Value::Arr([Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str(s.to_uppercase().to_string()),
-                },
-                Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str("no".to_string()),
-                }
-                ].to_vec()),
+                val: Value::Arr(
+                    [
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str(s.to_uppercase().to_string()),
+                        },
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str("no".to_string()),
+                        },
+                    ]
+                    .to_vec(),
+                ),
                 typ: Typ::BULK,
             };
         }
         Value::Str(ref s) if s.to_uppercase() == "maxmemory" => {
             return Resp {
-                val: Value::Arr([Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str(s.to_uppercase().to_string()),
-                },
-                Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str("0".to_string()),
-                }
-                ].to_vec()),
+                val: Value::Arr(
+                    [
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str(s.to_uppercase().to_string()),
+                        },
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str("0".to_string()),
+                        },
+                    ]
+                    .to_vec(),
+                ),
                 typ: Typ::BULK,
             };
         }
         Value::Str(ref s) if s.to_uppercase() == "timeout" => {
             return Resp {
-                val: Value::Arr([Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str(s.to_uppercase().to_string()),
-                },
-                Resp {
-                    typ: Typ::BULK,
-                    val: Value::Str("0".to_string()),
-                }
-                ].to_vec()),
+                val: Value::Arr(
+                    [
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str(s.to_uppercase().to_string()),
+                        },
+                        Resp {
+                            typ: Typ::BULK,
+                            val: Value::Str("0".to_string()),
+                        },
+                    ]
+                    .to_vec(),
+                ),
                 typ: Typ::BULK,
             };
         }
-        _ => {}         
-        
+        _ => {}
     }
     Resp {
         val: Value::Str("".to_string()),

@@ -1,10 +1,10 @@
+use std::io::{BufReader, BufWriter};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
-use std::io::{BufReader, BufWriter};
 
-use animus_rust::resp::{resp, writer, reader};
 use animus_rust::commands::handler;
+use animus_rust::resp::{reader, resp, writer};
 
 fn main() {
     handle();
@@ -27,10 +27,11 @@ where
 }
 
 fn handle() {
-    let listener = retry(5, Duration::from_secs(2), || TcpListener::bind("0.0.0.0:6379"))
-        .expect("Failed to start server after retries");
+    let listener = retry(5, Duration::from_secs(2), || {
+        TcpListener::bind("0.0.0.0:6379")
+    })
+    .expect("Failed to start server after retries");
     println!("Listening to port: 6379...");
-
 
     for stream in listener.incoming() {
         match stream {
@@ -45,7 +46,6 @@ fn handle() {
 }
 
 fn handle_requests(stream: TcpStream) {
-    println!("entered handle_requests");
     let reader = BufReader::new(&stream);
     let writer = BufWriter::new(&stream);
     let mut reader = reader::Reader::new(reader);
@@ -54,9 +54,11 @@ fn handle_requests(stream: TcpStream) {
     loop {
         let r = match reader.read() {
             Ok(r) => r,
-            Err(_) => return, // Connection closed or read error
+            Err(_e) => {
+                // println!("error in reading data {:?}", e);
+                return;
+            } // Connection closed or read error
         };
-        println!("got input {:?}", r);
         // Extract the array of arguments
         let args = match &r.val {
             resp::Value::Arr(a) => a,
@@ -99,10 +101,8 @@ fn handle_requests(stream: TcpStream) {
             return;
         }
 
-        println!("function: {}", cmd);
         match handler::commands().get(cmd.as_str()) {
             Some(handler) => {
-                println!("function: {}", cmd);
                 let result = (handler.func)(cmd_args.to_vec());
                 let _ = writer.write(result);
             }
