@@ -104,6 +104,7 @@ fn handle_requests(stream: TcpStream) {
         match handler::commands().get(cmd.as_str()) {
             Some(handler) => {
                 let result = (handler.func)(cmd_args.to_vec());
+                println!("{:?}", result);
                 let _ = writer.write(result);
             }
             None => {

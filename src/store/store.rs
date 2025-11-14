@@ -1,151 +1,179 @@
-// use std::hash::Hash;
-// use std::num::NonZero;
-// use std::sync::{Once, RwLock};
-// use std::thread;
-// use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
+use std::num::NonZero;
+use std::sync::{Arc, OnceLock, RwLock};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-// use lru::LruCache;
+use lru::LruCache;
 
-// /// Value stored in the cache with optional TTL
-// #[derive(Clone)]
-// struct Value<V> {
-//     val: V,
-//     ttl: Option<u64>, // Unix timestamp in seconds
-// }
+#[derive(Clone)]
+pub enum StoreVal {
+    Str(String),
+    Hash(HashMap<String, String>),
+    Set(HashSet<String>),
+    List(Vec<String>),
+}
 
-// /// The Store itself
-// pub struct Store<K, V>
-// where
-//     K: Eq + Hash + Clone,
-// {
-//     cache: RwLock<LruCache<K, Value<V>>>,
-//     max_size: usize,
-// }
+impl StoreVal {
+    pub fn get_str(&self) -> Option<&String> {
+        if let StoreVal::Str(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
 
-// /// A guard that allows safe access to the store
-// pub struct StoreLock;
+    pub fn get_hash(&self) -> Option<&HashMap<String, String>> {
+        if let StoreVal::Hash(h) = self {
+            Some(h)
+        } else {
+            None
+        }
+    }
 
-// impl StoreLock {
-//     /// Acquire the global store lock
-//     pub fn lock() -> StoreLock {
-//         GLOBAL_LOCK.write().unwrap();
-//         StoreLock
-//     }
-// }
+    pub fn get_set(&self) -> Option<&HashSet<String>> {
+        if let StoreVal::Set(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
 
-// // Automatically unlock when guard drops
-// impl Drop for StoreLock {
-//     fn drop(&mut self) {
-//         drop(GLOBAL_LOCK.write().unwrap());
-//     }
-// }
+    pub fn get_list(&self) -> Option<&Vec<String>> {
+        if let StoreVal::List(l) = self {
+            Some(l)
+        } else {
+            None
+        }
+    }
+}
 
-// static mut GLOBAL_STORE_PTR: *const Store<String, String> = 0 as *const Store<String, String>;
-// static INIT: Once = Once::new();
-// static GLOBAL_LOCK: RwLock<()> = RwLock::new(());
+/// Value stored in the cache with optional TTL
+#[derive(Clone)]
+struct Value<V> {
+    val: V,
+    ttl: Option<u64>, // Unix timestamp in seconds
+}
 
-// /// Access the global store
-// pub fn global_store() -> &'static Store<String, String> {
-//     unsafe {
-//         INIT.call_once(|| {
-//             let store = Store {
-//                 cache: RwLock::new(LruCache::new(NonZero::new(100_000).unwrap())),
-//                 max_size: 100_000,
-//             };
+/// The Store itself
+pub struct Store<K, V>
+where
+    K: Eq + Hash + Clone,
+{
+    cache: RwLock<LruCache<K, Value<V>>>,
+}
 
-//             // Start cleaner thread
-//             let store_ptr: *const Store<String, String> = &store;
-//             thread::spawn(move || {
-//                 loop {
-//                     thread::sleep(Duration::from_secs(1));
-//                     let store_ref: &Store<String, String> = unsafe { &*store_ptr };
-//                     store_ref.clean_expired();
-//                 }
-//             });
+static GLOBAL_STORE: OnceLock<Arc<Store<String, StoreVal>>> = OnceLock::new();
+static GLOBAL_LOCK: RwLock<()> = RwLock::new(());
 
-//             GLOBAL_STORE_PTR = Box::into_raw(Box::new(store));
-//         });
-//         &*GLOBAL_STORE_PTR
-//     }
-// }
+// Global guards to implement explicit read/write lock API
+static mut READ_GUARD: Option<std::sync::RwLockReadGuard<'static, ()>> = None;
+static mut WRITE_GUARD: Option<std::sync::RwLockWriteGuard<'static, ()>> = None;
 
-// impl<K, V> Store<K, V>
-// where
-//     K: Eq + Hash + Clone,
-//     V: Clone,
-// {
-//     fn clean_expired(&self) {
-//         let mut cache = self.cache.write().unwrap();
-//         let now = current_unix_time();
-//         let keys_to_remove: Vec<K> = cache
-//             .iter()
-//             .filter_map(|(k, v)| match v.ttl {
-//                 Some(ttl) if ttl <= now => Some(k.clone()),
-//                 _ => None,
-//             })
-//             .collect();
+/// Acquire a read lock
+pub fn read_lock() {
+    unsafe {
+        READ_GUARD = Some(GLOBAL_LOCK.read().unwrap());
+    }
+}
 
-//         for key in keys_to_remove {
-//             cache.pop(&key);
-//         }
-//     }
+/// Release a read lock
+pub fn read_unlock() {
+    unsafe {
+        READ_GUARD = None; // dropping the guard unlocks
+    }
+}
 
-//     pub fn get(&self, _lock: &StoreLock, key: &K) -> Option<V> {
-//         let mut cache = self.cache.write().unwrap();
-//         if let Some(value) = cache.get(key) {
-//             if let Some(ttl) = value.ttl {
-//                 if ttl <= current_unix_time() {
-//                     cache.pop(key);
-//                     return None;
-//                 }
-//             }
-//             return Some(value.val.clone());
-//         }
-//         None
-//     }
+/// Acquire a write lock
+pub fn write_lock() {
+    unsafe {
+        WRITE_GUARD = Some(GLOBAL_LOCK.write().unwrap());
+    }
+}
 
-//     pub fn set(&self, _lock: &StoreLock, key: K, val: V, ttl_seconds: Option<u64>) {
-//         let ttl = ttl_seconds.map(|t| t + current_unix_time());
-//         let mut cache = self.cache.write().unwrap();
-//         cache.put(key, Value { val, ttl });
-//     }
+/// Release a write lock
+pub fn write_unlock() {
+    unsafe {
+        WRITE_GUARD = None; // dropping the guard unlocks
+    }
+}
 
-//     pub fn delete(&self, _lock: &StoreLock, key: &K) {
-//         let mut cache = self.cache.write().unwrap();
-//         cache.pop(key);
-//     }
+/// Access the global store
+pub fn global_store() -> &'static Arc<Store<String, StoreVal>> {
+    GLOBAL_STORE.get_or_init(|| {
+        let store = Arc::new(Store {
+            cache: RwLock::new(LruCache::new(NonZero::new(100_000).unwrap())),
+        });
 
-//     pub fn keys(&self, _lock: &StoreLock) -> Vec<K> {
-//         let cache = self.cache.read().unwrap();
-//         cache.iter().map(|(k, _)| k.clone()).collect()
-//     }
-// }
+        // Background cleaner thread
+        let store_clone = store.clone();
+        thread::spawn(move || {
+            loop {
+                thread::sleep(Duration::from_secs(1));
+                store_clone.clean_expired();
+            }
+        });
 
-// fn current_unix_time() -> u64 {
-//     SystemTime::now()
-//         .duration_since(UNIX_EPOCH)
-//         .unwrap()
-//         .as_secs()
-// }
+        store
+    })
+}
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+impl<K, V> Store<K, V>
+where
+    K: Eq + Hash + Clone,
+    V: Clone,
+{
+    fn clean_expired(&self) {
+        let mut cache = self.cache.write().unwrap();
+        let now = current_unix_time();
+        let keys_to_remove: Vec<K> = cache
+            .iter()
+            .filter_map(|(k, v)| match v.ttl {
+                Some(ttl) if ttl <= now => Some(k.clone()),
+                _ => None,
+            })
+            .collect();
 
-//     #[test]
-//     fn test_store_singleton() {
-//         let lock = StoreLock::lock();
-//         let store = global_store();
+        for key in keys_to_remove {
+            cache.pop(&key);
+        }
+    }
 
-//         store.set(&lock, "key1".to_string(), "value1".to_string(), Some(1));
-//         assert_eq!(
-//             store.get(&lock, &"key1".to_string()),
-//             Some("value1".to_string())
-//         );
-//         std::thread::sleep(Duration::from_secs(2));
-//         assert_eq!(store.get(&lock, &"key1".to_string()), None);
+    pub fn get(&self, key: &K) -> Option<V> {
+        let mut cache = self.cache.write().unwrap();
+        if let Some(value) = cache.get(key) {
+            if let Some(ttl) = value.ttl {
+                if ttl <= current_unix_time() {
+                    cache.pop(key);
+                    return None;
+                }
+            }
+            return Some(value.val.clone());
+        }
+        None
+    }
 
-//         let keys = store.keys(&lock);
-//         assert!(keys.is_empty());
-//     }
-// }
+    pub fn set(&self, key: K, val: V, ttl_seconds: Option<u64>) {
+        let ttl = ttl_seconds.map(|t| t + current_unix_time());
+        let mut cache = self.cache.write().unwrap();
+        cache.put(key, Value { val, ttl });
+    }
+
+    pub fn delete(&self, key: &K) {
+        let mut cache = self.cache.write().unwrap();
+        cache.pop(key);
+    }
+
+    pub fn keys(&self) -> Vec<K> {
+        let cache = self.cache.read().unwrap();
+        cache.iter().map(|(k, _)| k.clone()).collect()
+    }
+}
+
+fn current_unix_time() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
